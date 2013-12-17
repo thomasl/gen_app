@@ -1,0 +1,13 @@
+%% Most fields are filled in by Makefile.
+%%
+%% NB: this is a library/code application
+
+{application, gen_app,
+ [{description, "Generic app/sup framework"},
+  {vsn, "%GEN_APP_VSN%"},
+  {modules, %GEN_APP_MODS%
+  },
+  {registered, %GEN_APP_PROCS%},
+  {applications, %GEN_APP_DEPS%}
+ ]
+}.
