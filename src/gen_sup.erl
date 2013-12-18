@@ -86,8 +86,10 @@
 -define(fallback_restart, permanent).  
 -define(fallback_shutdown, 2000).  %% Timeout in ms
 
--define(dbg(Str, Xs), io:format(Str, Xs)).
-%%-define(dbg(Str, Xs), ok).
+%-define(dbg(Str, Xs), io:format(Str, Xs)).
+-define(dbg(Str, Xs), ok).
+
+-define(info(Str, Xs), error_logger:info_msg(Str, Xs)).
 
 -define(table_owner, gen_table_owner).
 
@@ -106,7 +108,7 @@
 start_link(SupSpec0) ->
     ?dbg("Expanding ~p\n", [SupSpec0]),
     {ServerSpec, SupArgs} = convert_server_spec(SupSpec0),
-    ?dbg("Starting supervisor:start_link(~w, ~w,(~w)\n", [ServerSpec, ?MODULE, SupArgs]),
+    ?info("Starting supervisor:start_link(~w, ~w,(~w)\n", [ServerSpec, ?MODULE, SupArgs]),
     supervisor:start_link(ServerSpec, ?MODULE, SupArgs).
 
 %% This one starts as a child of Owner (which must be a supervisor)
@@ -116,7 +118,7 @@ start_link(SupSpec0) ->
 start_child(Owner, SupSpec) ->
     ?dbg("Expanding ~p\n", [SupSpec]),
     ChildSpec = convert_and_check_child_spec(SupSpec),
-    ?dbg("Starting child (owner ~w) ~w\n", [Owner, ChildSpec]),
+    ?info("Starting child (owner ~w) ~w\n", [Owner, ChildSpec]),
     supervisor:start_child(Owner, ChildSpec).
 
 %%====================================================================

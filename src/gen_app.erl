@@ -29,7 +29,6 @@
 %%
 %% STATUS
 %% - seems to work, esp. the app_sup/2 case
-%% - sup module name, ?dbg, app_sup/2, etc is nasty
 %% - upgrade to handle more complex cases, data driven
 %%   * specify normal/takeover/failover funs
 %%   * specify state tuple
@@ -50,8 +49,10 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--define(dbg(Str, Xs), io:format(Str, Xs)).
+%-define(dbg(Str, Xs), io:format(Str, Xs)).
 %-define(dbg(Str,Xs), ok).
+
+-define(info(Str, Xs), error_logger:info_msg(Str, Xs)).
 
 %%--------------------------------------------------------------------
 
@@ -158,17 +159,16 @@ app_spec(App, KV_args) ->
 %% - pass optional functions to run in the normal/takeover/failover cases
 %% - pass optional state function or state tuple
 %% - clean up the StartArgs before passing them to gen_sup:start_link/1
-%% - logging should be done systematically, not with "?dbg"
 
 start(normal, StartArgs) ->
     SupArgs = StartArgs,
     gen_sup:start_link(SupArgs);
 start({takeover, Node}, StartArgs) ->
-    ?dbg("Takeover(from ~p): ~w\n", [Node, StartArgs]),
+    ?info("Takeover(from ~p): ~w\n", [Node, StartArgs]),
     SupArgs = StartArgs,
     gen_sup:start_link(SupArgs);
 start({failover, Node}, StartArgs) ->
-    ?dbg("FAILOVER(from ~p): ~w\n", [Node, StartArgs]),
+    ?info("FAILOVER(from ~p): ~w\n", [Node, StartArgs]),
     SupArgs = StartArgs,
     gen_sup:start_link(SupArgs);
 start(Other, StartArgs) ->
