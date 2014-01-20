@@ -36,15 +36,13 @@
 %%  may be some awkwardness in running several tests.)
 %%
 %% UNFINISHED
+%% - check simple_one_for_one strategy! make sure it works
 %% - verify (and error check) entire tree
 %%   * reused names, repeated starts?
 %% - recursive expand of tree directly for debug
 %% - expand_term is used ad hoc, can we
 %%   do it once and for all instead?
 %%   * but avoid doing it again and again for subterms
-%% - document the standard keys
-%% - logging or yelling if key not found, config
-%% - rename to gen_sup
 
 -module(gen_sup).
 -behaviour(supervisor).

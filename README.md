@@ -11,23 +11,38 @@ Introduction
 
 Standard Erlang/OTP implements the application/supervisor
 framework using erlang modules, which in practice often are
-boilerplate code. 
+boilerplate code. You write a foo.app file, which starts a
+foo_app.erl module, which in turn invokes
+a foo_sup.erl supervisor module which starts up and maintains
+a supervisor tree.
 
 Gen\_app is intended to get rid of this boilerplate in what
 are the most common use cases: an application starts a supervisor
-tree according to some known scheme. We replace this by passing
+tree according to some fixed scheme. We replace this by passing
 a data structure to the gen\_app or gen\_sup module, which
-specifies what is to be started and how. 
+specifies what is to be started and how.
 
-In addition, gen\_sup provides the capability to start a
-recursive tree of supervisors (which conventionally is implemented
-with one module each), and handles a special case of owning
-ets tables. The gen\_app application can be used either in
-the usual .app files or can start a dynamically created
-application.
+Capabilities:
 
-Gen\_app is provided as a code application. All applications using
-gen\_app should thus depend on this application.
+- Can start application statically from .app file or dynamically from
+  function call.
+- Can start supervisor tree with gen\_sup inside ordinary
+  application module.
+- Sensible defaults provided.
+- Simple to start application which starts supervisor with
+  fixed set of children. (Most common use case.)
+- Simple to start application which starts supervisor with
+  dynamically added children.
+- Simple to start recursive tree of supervisors.
+- Simple syntax for starting servers as children.
+- Simple syntax for starting and maintaining ets tables under
+  supervision, eliminating extra boilerplate processes.
+- Powerful specifications with full OTP capabilities available
+  when needed.
+- Environment key syntax provided to further simplify
+  and power up specifications.
+- Provided as code application. (Applications using gen\_app
+  should depend on gen\_app.)
 
 Usage
 =====
@@ -180,6 +195,8 @@ Pull requests
 The following are known deficiencies; pull requests are
 welcome.
 
+- make sure simple_one_for_one strategy is correctly
+  supported
 - clean up the current code, nicer logging
 - clean up the Makefile, in particular paths and use
   of smart\_exceptions
