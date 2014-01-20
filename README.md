@@ -35,14 +35,14 @@ Usage
 You can use gen\_app interactively or in a .app file.
 Here is the possibly simplest example.
 
-   > gen_app:app_sup(testapp, [{sup, my_sup}]).
+   1> gen_app:app_sup(testapp, [{sup, my_sup}]).
 
 This starts an application testapp consisting of a single
 supervisor my\_sup.
 Children can then be added dynamically using the gen_sup:start_child/2
 call.
 
-   > gen_sup:start_child(my_sup, my_gen_server).
+   2> gen_sup:start_child(my_sup, my_gen_server).
 
 This starts my_gen_server:start\_link() as a supervised child of my\_sup.
 You can also start the child directly as part of the gen\_app:app\_sup/2
