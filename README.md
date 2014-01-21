@@ -22,7 +22,8 @@ tree according to some fixed scheme. We replace this by passing
 a data structure to the gen\_app or gen\_sup module, which
 specifies what is to be started and how.
 
-Capabilities:
+Capabilities
+----------
 
 - Can start application statically from .app file or dynamically from
   function call.
