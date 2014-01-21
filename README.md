@@ -44,6 +44,12 @@ Capabilities:
 - Provided as code application. (Applications using gen\_app
   should depend on gen\_app.)
 
+Limitations
+----------
+
+- The 'simple\_one\_for\_one' supervisor strategy has not been
+  tested (Q: is this an important use case?)
+
 Usage
 =====
 
