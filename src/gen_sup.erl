@@ -35,8 +35,13 @@
 %% (Note that the supervisors are not killed after the tests, so there
 %%  may be some awkwardness in running several tests.)
 %%
+%% NOTE: test supervisor strategy 'simple_one_for_one',
+%%  child spec + use start_child(SupRef, ExtraArgsList)
+%%  - undecided whether this is a top use case? seems
+%%    like a very hacky solution (better found in
+%%    a library somewhere, right?)
+%%
 %% UNFINISHED
-%% - check simple_one_for_one strategy! make sure it works
 %% - verify (and error check) entire tree
 %%   * reused names, repeated starts?
 %% - recursive expand of tree directly for debug
