@@ -17,7 +17,7 @@
 %%   {mod, {?MODULE, SupArg}},
 %%   ...]}
 %%
-%% Where SupArg is a supervisor tree, specified as in module ?sup.
+%% Where SupArg is a supervisor tree, specified as in module gen_sup.
 %%
 %% Option 2: start the application dynamically
 %%
@@ -40,12 +40,6 @@
 
 %% Application callbacks
 -export([start/2, stop/1, prep_stop/1]).
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% (Defined sup module name as a macro since the
-%% generic sup may be renamed.)
-
--define(sup, gen_sup).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -318,5 +312,4 @@ test1(App, SupSpec) ->
 test1_setup(App, StartArgs) ->
     application:unload(App),
     app_sup(App, StartArgs).
-
 

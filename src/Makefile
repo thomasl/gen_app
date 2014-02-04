@@ -9,20 +9,11 @@
 ## - debug_info
 ## - export_all
 ## - uses smart_exceptions parse transform
-##
-## UNFINISHED
-## (The smart exception usage is pretty clunky. As
-## written, you'll have to install it in the right
-## place.)
 
 GEN_APP_INC_DIR=../include
 GEN_APP_SRC_DIR=../src
 
-## UNFINISHED
-## - weird paths, should be fixed
-
-BASEDIR=$(HOME)/git
-UTIL_DIR=$(BASEDIR)/smart_exceptions/devel/ebin
+UTIL_DIR=../smart_exceptions/devel/ebin
 
 # NB: We currently export everything, to simplify debugging
 
