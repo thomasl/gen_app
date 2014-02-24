@@ -49,6 +49,7 @@ BEHAVIOUR_SRC= \
 GEN_APP_MODS= \
 	gen_app \
 	gen_sup \
+	gen_sup_bridge \
 	gen_table_owner
 
 GEN_APP_SRC := $(patsubst %, %.erl, $(GEN_APP_MODS))

@@ -61,6 +61,12 @@
 %% Supervisor callbacks
 -export([init/1]).
 
+%% Internal export
+-export(
+   [
+    spawn_link_bridge/2
+   ]).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Standard config keys
@@ -148,12 +154,15 @@ init({SupStrategy, ChildSpecs}) ->
 %%    {supervisor, Name, SupStrategy?, [Child]?}
 %%  | {sup, Name, SupStrategy?, [Child]?}
 %%  | {env, PropList, Child}
+%%  | {envlist, EnvKeyList, Child}
 %%
 %% where
 %%  SupStrategy = Strategy | {Strategy, MaxR, MaxT}
 %%  Child = Mod | {Name, Mod} 
 %%    | SupSpec
 %%    | {Id, StartMFArgs, Restart, Shutdown, Type?, Mods?}
+%%  EnvKeyList = list of {key, Key} | {opt_key, Key} | atom()
+%%    (see envlist/2 for how they are expanded)
 %%
 %% Note: if one of SupStrategy or [Child] is omitted, the
 %%  remaining argument is assumed to be [Child].
@@ -165,6 +174,8 @@ init({SupStrategy, ChildSpecs}) ->
 %%  Strategy, MaxR, MaxT are
 %%  replaced by the value of Key in the current env.
 %%   (or 'undefined' if none is found).
+%% Note: occurrences of {keylist, Keys} replaced by list of
+%%  key-value pairs; the Keys are same type as EnvKeyList.
 %%
 %% Default values:
 %%   Default = undefined
@@ -225,6 +236,9 @@ convert_server_spec({supervisor, Name, Childs}, Env) ->
     convert_server_spec({supervisor, Name, Strat, Childs}, Env);
 convert_server_spec({env, KVs, SupChild}, Env) ->
     NewEnv = extend_environment(KVs, Env),
+    convert_server_spec(SupChild, NewEnv);
+convert_server_spec({envlist, Keys, SupChild}, Env) ->
+    NewEnv = extend_environment_list(Keys, Env),
     convert_server_spec(SupChild, NewEnv);
 convert_server_spec({supervisor, Name, Strat, Childs0}, Env) ->
     %% OK, now we've gotten rid of all the shorthand,
@@ -321,9 +335,14 @@ convert_child_spec({supervisor, Name, Strat0}, Env) ->
 convert_child_spec({env, KVs, SupChild}, Env) ->
     NewEnv = extend_environment(KVs, Env),
     convert_child_spec(SupChild, NewEnv);
+convert_child_spec({envlist, Keys, SupChild}, Env) ->
+    NewEnv = extend_environment_list(Keys, Env),
+    convert_child_spec(SupChild, NewEnv);
 convert_child_spec({key, _Key}=Term, Env) ->
     convert_child_spec(expand_term(Term, Env), Env);
 convert_child_spec({key, _Key, _Dflt}=Term, Env) ->
+    convert_child_spec(expand_term(Term, Env), Env);
+convert_child_spec({keylist, Keys}=Term, Env) ->
     convert_child_spec(expand_term(Term, Env), Env);
 convert_child_spec({supervisor, Name, Strat, Childs}, Env) ->
     Mods = read_config(child_modules, Env, dynamic),
@@ -369,6 +388,18 @@ convert_child_spec({Name, Mod}, Env) ->
     Type = worker,
     Modules = read_config(child_modules, Env, dynamic),  %% ???
     {Id, StartMFArgs, Restart, Shutdown, Type, Modules};
+convert_child_spec({bridge, Name, MFArgs}, Env) ->
+    %% start a general process MFArgs, obey supervisor
+    %% protocol
+    NewMFArgs = expand_term(MFArgs, Env),
+    NewName = expand_term(Name, Env),
+    Id = NewName,
+    StartMFArgs = {?MODULE, spawn_link_bridge, [NewName, NewMFArgs]},
+    Restart = read_config(child_restart, Env, ?fallback_restart),
+    Shutdown = read_config(child_shutdown, Env, ?fallback_shutdown),
+    Type = worker,
+    Modules = read_config(child_modules, Env, dynamic),  %% ???
+    {Id, StartMFArgs, Restart, Shutdown, Type, Modules};
 convert_child_spec({Id, StartMFArgs, Restart, Shutdown, Type, Modules}=Chspec, Env) ->
     %% here we have a regular child spec, no more recursion,
     %% just expand away the keys.
@@ -382,6 +413,12 @@ convert_child_spec(Mod, Env) ->
 	true ->
 	    exit({bad_child_name, Mod, {expands_to, Name}})
     end.
+
+%% Start a generic process wrapped in supervisor_bridge
+
+spawn_link_bridge(Name, MFArgs) ->
+    ?dbg("Starting bridge ~p ~p\n", [Name, MFArgs]),
+    supervisor_bridge:start(Name, gen_sup_bridge, [MFArgs]).
 
 %% enclose_env/2: pass the environment along,
 %% unless it's empty
@@ -415,20 +452,34 @@ expand_mode() ->
 %%
 %% Expand all occurrences of 
 %%   {key, Key, Dflt?}
-%% using Env, inside the Term.
+%% using Env, inside the Term. Can also
+%% use {envlist, Keys}
+%%   which expands a list of
+%%    {key, K} | {opt_key, K} into
+%%   key-value pairs {K,V} (opt_key that
+%%   is undefined is dropped)
 %%
 %% UNFINISHED
-%% - handling of maps when they arrive?
+%% - handling of maps when they arrive (R17)
+%% - special expansion of predefined atoms
+%%   like maxR, maxT and others? (= always expand,
+%%   even if outside key-wrapper) ugh, unclear,
+%%   that means we can't use them without some
+%%   escape mechanism
 
 expand_term(Term, Env) ->
     Keys = [],
     expand_term(Term, Env, Keys).
 
+expand_term({envlist, Keys}, Env, SeenKeys) ->
+    envlist(Keys, Env, SeenKeys);
 expand_term({key, Key}, Env, Keys) ->
     Dflt = undefined,
     read_config(Key, Env, Dflt, Keys);
 expand_term({key, Key, Dflt}, Env, Keys) ->
     read_config(Key, Env, Dflt, Keys);
+expand_term({keylist, Keys}, Env, SeenKeys) ->
+    keylist(Keys, Env, SeenKeys);
 expand_term(Term, Env, Keys) ->
     if
 	is_tuple(Term) ->
@@ -474,14 +525,20 @@ empty_environment() ->
 extend_environment(KVs, Env) ->    
     KVs ++ Env.
 
+%% expand the keys into key-value pairs
+%% and add them to the environment
+
+extend_environment_list(Keys, Env) ->
+    envlist(Keys, Env) ++ Env.
+
 %% read_config/3 expands the key recursively in
-%% the environment.
+%% the environment. Includes expansion of keys
+%% inside the term.
 %%
-%% LIMITATION:
-%% - only expands away chains of keys, not
-%%   keys inside of terms!
-%% - need to rewrite expand_term to track visited keys
-%%   to handle that
+%% Detects loops of definitions and dies.
+
+read_config(Key, Env) ->
+    read_config(Key, Env, undefined).
 
 read_config(Key, Env, Dflt) ->
     read_config(Key, Env, Dflt, []).
@@ -521,6 +578,56 @@ read_conf(Key, Env, Dflt) ->
 %% Internal functions
 %%====================================================================
 
+%% envlist/2 is used to easily read values from config and extend the
+%% environment.  See ex_ssl for usage; this kind of case appears in
+%% legacy code conversion (for example).
+%%
+%% Here are the expansions in the envlist:
+%%  {key, K} => {K, value(K)}
+%%  {opt_key, K} => {K, value(K)} if defined, else remove from list
+%%  K => {K, value(K)}  when K is an atom, it is assumed to be {key, K}.
+%%
+%% Thus, {opt_key, K} will only extend the environment if K has a defined value,
+%% while {key, K} will always extend it, with 'undefined' if no value is
+%% found.
+%%
+%% Net result: In the ex_ssl case, we can write a very compact spec:
+%%  {envlist,
+%%   [session_cb, session_cb_init_args, session_lifetime], Item}
+%% instead of the long-form:
+%%  {env, [{session_cb, {key, session_cb}},...], Item}
+%% or the even longer version, similar to the original code:
+%%  {env, [{session_cb, application:get_env(ssl, session_cb)},...], Item}
+%%
+%% We have a second use case: when we just want to produce a list of key-values.
+%% This is written as a {keylist, Keys}, and expands to the corresponding list
+%% (rather than extending the env). keylist uses the same code as envlist.
+
+keylist(Keys, Env) ->
+    envlist(Keys, Env).
+
+keylist(Keys, Env, SeenKeys) ->
+    envlist(Keys, Env, SeenKeys).
+
+envlist(Keys, Env) ->
+    envlist(Keys, Env, []).
+
+envlist([{key, K}|Xs], Env, Keys) ->
+    [{K, read_config(K, Env, undefined, Keys)}|envlist(Xs, Env, Keys)];
+envlist([{opt_key, K}|Xs], Env, Keys) ->
+    case read_config(K, Env, undefined, Keys) of
+	undefined ->
+	    envlist(Xs, Env, Keys);
+	Val ->
+	    [{K, Val}|envlist(Xs, Env, Keys)]
+    end;
+envlist([K|Xs], Env, Keys) when is_atom(K) ->
+    %% shorthand for {key, K}
+    [{K, read_config(K, Env, undefined, Keys)}|envlist(Xs, Env, Keys)];
+envlist([K|_], _Env, _Keys) ->
+    exit({invalid_envlist_key, K});
+envlist([], Env, Keys) ->
+    [].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Tests
