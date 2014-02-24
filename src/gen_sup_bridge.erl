@@ -12,9 +12,13 @@
 
 -export([init/1, terminate/2]).
 
-init(MFArgs) ->
-    PID = spawn_link(erlang, apply, MFArgs),
+%%
+
+init([{M, F, Args}]) ->
+    PID = proc_lib:spawn_link(erlang, apply, [M, F, Args]),
     {ok, PID, {bridge_pid, PID}}.
+
+%%
 
 terminate(shutdown, {bridge_pid, PID}) ->
     %% supervisor originated

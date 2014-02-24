@@ -64,6 +64,7 @@
 %% Internal export
 -export(
    [
+    spawn_link_bridge/1,
     spawn_link_bridge/2
    ]).
 
@@ -391,10 +392,23 @@ convert_child_spec({Name, Mod}, Env) ->
 convert_child_spec({bridge, Name, MFArgs}, Env) ->
     %% start a general process MFArgs, obey supervisor
     %% protocol
+    %% - named process case
     NewMFArgs = expand_term(MFArgs, Env),
     NewName = expand_term(Name, Env),
     Id = NewName,
     StartMFArgs = {?MODULE, spawn_link_bridge, [NewName, NewMFArgs]},
+    Restart = read_config(child_restart, Env, ?fallback_restart),
+    Shutdown = read_config(child_shutdown, Env, ?fallback_shutdown),
+    Type = worker,
+    Modules = read_config(child_modules, Env, dynamic),  %% ???
+    {Id, StartMFArgs, Restart, Shutdown, Type, Modules};
+convert_child_spec({bridge, MFArgs}, Env) ->
+    %% start a general process MFArgs, obey supervisor
+    %% protocol
+    %% - anonymous process case
+    NewMFArgs = expand_term(MFArgs, Env),
+    Id = undefined,
+    StartMFArgs = {?MODULE, spawn_link_bridge, [NewMFArgs]},
     Restart = read_config(child_restart, Env, ?fallback_restart),
     Shutdown = read_config(child_shutdown, Env, ?fallback_shutdown),
     Type = worker,
@@ -415,10 +429,16 @@ convert_child_spec(Mod, Env) ->
     end.
 
 %% Start a generic process wrapped in supervisor_bridge
+%%
+%% (See gen_sup_bridge for details, basically apply the MFArgs.)
 
 spawn_link_bridge(Name, MFArgs) ->
     ?dbg("Starting bridge ~p ~p\n", [Name, MFArgs]),
-    supervisor_bridge:start(Name, gen_sup_bridge, [MFArgs]).
+    supervisor_bridge:start_link(Name, gen_sup_bridge, [MFArgs]).
+
+spawn_link_bridge(MFArgs) ->
+    ?dbg("Starting anon bridge ~p ~p\n", [Name, MFArgs]),
+    supervisor_bridge:start_link(gen_sup_bridge, [MFArgs]).
 
 %% enclose_env/2: pass the environment along,
 %% unless it's empty
