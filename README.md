@@ -169,7 +169,8 @@ be 'dynamic'.
 
 Specifying a child 'bridge' spawns the supplied MFArgs 
 {M, F,[Arg1,...,ArgN]} as a named or unnamed process using
-supervisor\_bridge.
+supervisor\_bridge. 
+Use this to statically hook ordinary processes into the supervisor tree.
 
 Specifying a child 'tables' means a gen\_table\_owner is started, which then
 loads or creates the specified tables. This is useful when you want a simple
