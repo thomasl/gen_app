@@ -36,6 +36,7 @@ Capabilities
   dynamically added children.
 - Simple to start recursive tree of supervisors.
 - Simple syntax for starting servers as children.
+- Simple syntax for starting raw processes using supervisor\_bridge.
 - Simple syntax for starting and maintaining ets tables under
   supervision, eliminating extra boilerplate processes.
 - Powerful specifications with full OTP capabilities available
@@ -150,6 +151,8 @@ The type child() is an extension of supervisor children:
       module()
     | {name(), module()}
     | sup()
+    | {bridge,         {module(), function(), [any()]}}
+    | {bridge, name(), {module(), function(), [any()]}}
     | {tables, name(), [tabspec()]}
     | {id(), {module(), function(), [any()]}, restart(), shutdown(), type(), modules()}
     | {id(), {module(), function(), [any()]}, restart(), shutdown()}
@@ -163,6 +166,10 @@ that is a sup() is a supervisor started by gen\_sup. Finally, a child() can be
 a conventional full supervisor child specification. If the type() is omitted, it
 is assumed to be 'worker'. If modules() is omitted, it is assumed to
 be 'dynamic'.
+
+Specifying a child 'bridge' spawns the supplied MFArgs 
+{M, F,[Arg1,...,ArgN]} as a named or unnamed process using
+supervisor\_bridge.
 
 Specifying a child 'tables' means a gen\_table\_owner is started, which then
 loads or creates the specified tables. This is useful when you want a simple
