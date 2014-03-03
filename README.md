@@ -52,6 +52,7 @@ Limitations
 
 - The 'simple\_one\_for\_one' supervisor strategy has not been
   tested (Q: is this an important use case?)
+- Callback config_change/3 just returns. Due to the callback API, we can't do anything app specific at this time.
 - The application key 'start\_phases' is not supported. If you need this functionality, it makes sense to instead write an ordinary application module.
 - Applications always start as 'temporary', which is the common use case. There is currently no way to specify 'permanent' or 'transient'. (Q: do you need these startup types?)
 
