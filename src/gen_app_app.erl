@@ -9,7 +9,7 @@
 -module(gen_app_app).
 -behaviour(application).
 %% Application callbacks
--export([start/2, stop/1, prep_stop/1]).
+-export([start/2, stop/1, prep_stop/1, config_change/3]).
 
 -define(info(Str, Xs), error_logger:info_msg(Str, Xs)).
 
@@ -104,5 +104,10 @@ prep_stop(State) ->
 	    State
     end.
 
+%%--------------------------------------------------------------------
+%% config_change/3
+%%
+%% (We have no access to State, so we can't lookup a function to use.)
 
-
+config_change(Changed, New, Removed) ->
+    ok.
