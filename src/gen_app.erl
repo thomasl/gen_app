@@ -14,32 +14,50 @@
 %%
 %% {application, App, 
 %%  [...,
-%%   {mod, {?MODULE, SupArg}},
+%%   {mod, {gen_app_app, SupArg}},   %% NOTE module name!
 %%   ...]}
+%%
+%% gen_app_app implements the static application behaviour.
+%% (We do this because we want to provide gen_app:start/2 for
+%% dynamic application startup)
 %%
 %% Where SupArg is a supervisor tree, specified as in module gen_sup.
 %%
 %% Option 2: start the application dynamically
 %%
-%%   ?MODULE:app_sup(AppName, Args)
+%%   gen_app:start(AppName, Args)
+%%   gen_app:app_sup(AppName, Args)  [deprecated]
 %%
 %% where Args is an application description (man application)
 %% extended with keys 'distributed' to show how to start, and
 %% 'supervisor' or 'sup' to specify the supervisor tree.
 %%
+%% DESIGN NOTE
+%% - we use application:ensure_all_started/1 by default rather than
+%%   application:start/2, for convenience.
+%%   * note that we use 'temporary' as the restart type;
+%%     is it worth generalizing this?
+%% - distributed app takeover/failover/... not yet handled
+%% - start_phases not yet handled
+%%   * might be better to just write an application module
+%%     in this case => WONTFIX
+%% 
 %% STATUS
-%% - seems to work, esp. the app_sup/2 case
-%% - upgrade to handle more complex cases, data driven
-%%   * specify normal/takeover/failover funs
-%%   * specify state tuple
+%% - needs testing of refactoring and use of gen_app_app
+%% - upgrade to handle more complex cases, data driven again
+%%   * multinode, failover, takeover, ...?
+%%   * do that in gen_app_app? and/or here
 
 -module(gen_app).
--behaviour(application).
-
--export([app_sup/2]).
-
-%% Application callbacks
--export([start/2, stop/1, prep_stop/1]).
+-export(
+   [start/2,
+    start/3,
+    stop/1
+   ]).
+%% Deprecated
+-export(
+   [app_sup/2]
+  ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -47,6 +65,12 @@
 %-define(dbg(Str,Xs), ok).
 
 -define(info(Str, Xs), error_logger:info_msg(Str, Xs)).
+
+%% The 'application' module to use
+
+-define(GEN_APPL, gen_app_app).
+
+-define(exit(Rsn), erlang:exit({?MODULE, ?LINE, Rsn})).
 
 %%--------------------------------------------------------------------
 
@@ -62,37 +86,113 @@
 %% tree ('sup' or 'supervisor').
 
 app_sup(App, Args) ->
+    io:format("~p:app_sup/2 is deprecated, use ~p:start/2 instead\n",
+	      [?MODULE, ?MODULE]),
+    start(App, Args).
+
+%% Main entry point
+
+start(App, Args) ->
+    start(App, normal, Args).
+
+%% Advanced entry point
+%% - similar to application start/2 callback
+%%
+%% In essence, using Args we build a dynamic application specification
+%% with the name App, load it and start it. The actual application
+%% module is given as the 'mod' key below (we currently use gen_app_app).
+%% 
+%% UNFINISHED
+%% - currently limited to 'normal' startup
+%%   * specify takeover/failover/etc actions; how?
+%% - LoadType and the 'distributed' key is a bit awkward,
+%%   can we spec it better?
+%% - testing of distributed load/start needed
+
+start(App, normal, Args) ->
     AppSpec = app_spec(App, Args),
-    LoadType = val(distributed, Args, local),
-    start_app_sup(App, AppSpec, LoadType).
+    LoadType = case val(distributed, Args, local) of
+		   true ->
+		       distributed;
+		   false ->
+		       local;
+		   Nodes when is_list(Nodes) ->
+		       {distributed, Nodes};
+		   {Time, Nodes} when is_list(Nodes) ->
+		       {distributed, Time, Nodes};
+		   Other ->
+		       Other
+	       end,
+    start_app_sup(App, AppSpec, LoadType);
+start(App, StartType, Args) ->
+    exit({start_type_not_yet_handled, StartType}).
 
 start_app_sup(App, AppSpec, LoadType) ->
     case application_loaded(App) of
 	true ->
 	    {error, {application_already_loaded, App}};
 	false ->
-	    case LoadType of
-		local ->
-		    %% Start using load/1
-		    case application:load(AppSpec) of
-			ok ->
-			    application:ensure_all_started(App);
-			Err ->
-			    Err
-		    end;
-		_ ->
-		    %% Start using load/2
-		    %%
-		    %% - check: do we have to start on all nodes
-		    %%   or is that implicit?
-		    case application:load(AppSpec, LoadType) of
-			ok ->
-			    application:ensure_all_started(App);
-			Err ->
-			    Err
-		    end
+	    case load_app(App, AppSpec, LoadType) of
+		ok ->
+		    application:ensure_all_started(App);
+		Err ->
+		    Err
 	    end
     end.
+
+%% App = app name
+%% AppSpec = application spec
+%% LoadType = 
+%%   local                         (only on this node)
+%%   distributed                   (distributed, use defaults)
+%%   {distributed, Nodes}          (distributed on nodes, Time=0)
+%%   {distributed, Time, Nodes}    (distributed on nodes, wait Time ms and restart)
+%%   default                       (use default from conf, see man page)
+%%
+%% See the application:load/2 man page for more info on what goes on and
+%% what parameters are being passed. The above provides some wrappers
+%% to simplify the specification.
+%%
+%% 'distributed' loads the application in distributed mode
+%% as per the application:load/2 man page. Not passing any arguments
+%% means we allow the app to restart on any available node, otherwise
+%% transplant to docs.
+%%
+%% NOTES:
+%% - not sure if 'distributed' w/o args is useful?
+%% - nicer notation for Nodes spec? API is very bare bones
+
+load_app(App, AppSpec, local) ->
+    application:load(AppSpec);
+load_app(App, AppSpec, LoadType0) ->
+    LoadType =
+	case LoadType0 of
+	    default ->
+		default;
+	    distributed ->
+		%% - app starts on current node
+		%% - app can failover to any CURRENTLY connected node
+		Nodes = 
+		    case nodes() of
+			[] ->
+			    [node()];
+			Ns -> 
+			    [node()|list_to_tuple(Ns)]
+		    end,
+		{App, Nodes};
+	    {distributed, Nodes} ->
+		{App, Nodes};
+	    {distributed, Time, Nodes} 
+	      when is_integer(Time), Time > 0 ->
+		{App, Time, Nodes};
+	    LoadType0 ->
+		exit({load_type_not_handled, LoadType0})
+	
+	end,
+    application:load(AppSpec, LoadType).
+
+%% app_spec/2 creates a suitable application specification from the
+%% key-value inputs. 
 
 app_spec(App, KV_args) ->
     case none_val([start_phases,mod], KV_args) of
@@ -106,7 +206,7 @@ app_spec(App, KV_args) ->
 		     optional(
 		       [kval(description, KV_args, fmt("App/sup ~p", [App])),
 			kval([vsn, version], KV_args, "0.0"),
-			{mod, {?MODULE, SupArgs}},
+			{mod, {?GEN_APPL, SupArgs}},
 			kval(modules, KV_args),
 			kval(registered, KV_args),
 			kval(applications, KV_args),
@@ -131,87 +231,16 @@ app_spec(App, KV_args) ->
 	    end
     end.
 
-%%====================================================================
-%% Application callbacks
-%%====================================================================
-%%--------------------------------------------------------------------
-%% Function: start(Type, StartArgs) -> {ok, Pid} |
-%%                                     {ok, Pid, State} |
-%%                                     {error, Reason}
-%% Description: This function is called whenever an application 
-%% is started using application:start/1,2, and should start the processes
-%% of the application. If the application is structured according to the
-%% OTP design principles as a supervision tree, this means starting the
-%% top supervisor of the tree.
-%%--------------------------------------------------------------------
-%%  Type = normal | {takeover, Node} | {failover, Node}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% stop/1 just uses gen_app_app.
 %%
-%% NOTES
-%% - currently only handles the simple case returning {ok, PID}.
+%% NOTE: interface may need some work.
 %%
-%% UNFINISHED (extensions)
-%% - pass optional functions to run in the normal/takeover/failover cases
-%% - pass optional state function or state tuple
-%% - clean up the StartArgs before passing them to gen_sup:start_link/1
-
-start(normal, StartArgs) ->
-    SupArgs = StartArgs,
-    gen_sup:start_link(SupArgs);
-start({takeover, Node}, StartArgs) ->
-    ?info("Takeover(from ~p): ~w\n", [Node, StartArgs]),
-    SupArgs = StartArgs,
-    gen_sup:start_link(SupArgs);
-start({failover, Node}, StartArgs) ->
-    ?info("FAILOVER(from ~p): ~w\n", [Node, StartArgs]),
-    SupArgs = StartArgs,
-    gen_sup:start_link(SupArgs);
-start(Other, StartArgs) ->
-    exit({unknown_startup_type, Other}).
-
-%%--------------------------------------------------------------------
-%% start_phase/3 is called when the application is
-%% started in phases, which is specified in the .app file.
-%%
-%% NOTE:
-%% - the use case currently seems complex enough that writing a
-%%   custom application module is okay, so we skip this.
-
-%%--------------------------------------------------------------------
-%% Function: stop(State) -> void()
-%% Description: This function is called whenever an application
-%% has stopped. It is intended to be the opposite of Module:start/2 and
-%% should do any necessary cleaning up. The return value is ignored. 
-%%--------------------------------------------------------------------
-%% - if a {stop, MF} is passed, run it on the State. The function
-%%   return value is ignored, like stop/1 itself.
+%% UNFINISHED
+%% - testing
 
 stop(State) ->
-    case catch lists:keysearch(stop, 1, State) of
-	{value, {_, {M, F}}} ->
-	    (catch M:F(State));
-	_ ->
-	    ok
-    end.
-
-%%--------------------------------------------------------------------
-%%  State is passed when {ok, Pid, State} is returned.
-%%
-%% We do this: pass a {prep_stop, MF} as part of state. If this
-%% is present, we apply the MF to the state. Otherwise, pass the
-%% state unchanged. 
-
-prep_stop(State) ->
-    case catch lists:keysearch(prep_stop, 1, State) of
-	{value, {_, {M, F}}} ->
-	    case catch M:F(State) of
-		{'EXIT', Rsn} ->
-		    State;
-		NewState ->
-		    NewState
-	    end;
-	_ ->
-	    State
-    end.
+    gen_app_app:stop(State).
 
 %%====================================================================
 %% Internal functions

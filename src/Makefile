@@ -48,6 +48,7 @@ BEHAVIOUR_SRC= \
 
 GEN_APP_MODS= \
 	gen_app \
+	gen_app_app \
 	gen_sup \
 	gen_sup_bridge \
 	gen_table_owner
